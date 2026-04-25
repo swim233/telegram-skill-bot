@@ -1,6 +1,7 @@
 package utils
 
 import (
+	"fmt"
 	"html"
 	"regexp"
 	"strings"
@@ -18,14 +19,9 @@ func FoldText2Html(title, content string) string {
 }
 
 var (
-	// 匹配 ```lang\n...\n``` 代码块
-	reCodeBlock = regexp.MustCompile("(?s)```(\\w*)\\n(.*?)```")
-	// 匹配 `inline code`
+	reCodeBlock  = regexp.MustCompile("(?s)```(\\w*)\\n(.*?)```")
 	reInlineCode = regexp.MustCompile("`([^`]+)`")
-	// 匹配 **bold**
-	reBold = regexp.MustCompile(`\*\*(.+?)\*\*`)
-	// 匹配 *italic* (不匹配 ** 开头的)
-	reItalic = regexp.MustCompile(`(?:^|[^*])\*([^*]+?)\*(?:[^*]|$)`)
+	reBold       = regexp.MustCompile(`\*\*(.+?)\*\*`)
 )
 
 // MarkdownToFoldedHTML 将 Markdown 转为 Telegram HTML 并包裹折叠标签
@@ -34,71 +30,62 @@ func MarkdownToFoldedHTML(title, mdContent string) string {
 	return "<b>" + html.EscapeString(title) + "</b>\n<blockquote expandable>" + body + "</blockquote>"
 }
 
-// markdownToTelegramHTML 将常见 markdown 语法转为 Telegram 支持的 HTML
 func markdownToTelegramHTML(md string) string {
-	// 1. 提取代码块，用占位符替换，避免内部被转义
-	type codeBlock struct {
-		lang string
-		code string
+	// 用唯一占位符保护代码块和行内代码，避免被 HTML 转义破坏
+	type placeholder struct {
+		key     string
+		replace string
 	}
-	var blocks []codeBlock
-	placeholder := "\x00CODEBLOCK%d\x00"
+	var holders []placeholder
+	idx := 0
 
-	result := reCodeBlock.ReplaceAllStringFunc(md, func(match string) string {
-		subs := reCodeBlock.FindStringSubmatch(match)
-		lang := subs[1]
-		code := subs[2]
-		idx := len(blocks)
-		blocks = append(blocks, codeBlock{lang: lang, code: code})
-		return strings.Replace(placeholder, "%d", strings.Repeat("0", 1)+string(rune('0'+idx)), 1)
-	})
+	nextKey := func() string {
+		k := fmt.Sprintf("\x00PH%d\x00", idx)
+		idx++
+		return k
+	}
 
-	// 简化：用索引占位
-	blocks = nil
-	result = reCodeBlock.ReplaceAllStringFunc(md, func(match string) string {
+	// 1. 提取代码块
+	md = reCodeBlock.ReplaceAllStringFunc(md, func(match string) string {
 		subs := reCodeBlock.FindStringSubmatch(match)
-		idx := len(blocks)
-		blocks = append(blocks, codeBlock{lang: subs[1], code: subs[2]})
-		return "\x00CB" + string(rune(idx)) + "\x00"
+		lang, code := subs[1], strings.TrimRight(subs[2], "\n")
+		escaped := html.EscapeString(code)
+		var rep string
+		if lang != "" {
+			rep = "<pre><code class=\"language-" + html.EscapeString(lang) + "\">" + escaped + "</code></pre>"
+		} else {
+			rep = "<pre><code>" + escaped + "</code></pre>"
+		}
+		key := nextKey()
+		holders = append(holders, placeholder{key: key, replace: rep})
+		return key
 	})
 
 	// 2. 提取行内代码
-	type inlineCode struct {
-		code string
-	}
-	var inlines []inlineCode
-	result = reInlineCode.ReplaceAllStringFunc(result, func(match string) string {
+	md = reInlineCode.ReplaceAllStringFunc(md, func(match string) string {
 		subs := reInlineCode.FindStringSubmatch(match)
-		idx := len(inlines)
-		inlines = append(inlines, inlineCode{code: subs[1]})
-		return "\x00IC" + string(rune(idx)) + "\x00"
+		escaped := html.EscapeString(subs[1])
+		rep := "<code>" + escaped + "</code>"
+		key := nextKey()
+		holders = append(holders, placeholder{key: key, replace: rep})
+		return key
 	})
 
-	// 3. 转义剩余 HTML
-	result = html.EscapeString(result)
+	// 3. 转换 bold（在转义前处理，因为 ** 会被转义）
+	md = reBold.ReplaceAllString(md, "\x01B$1\x01b")
 
-	// 4. 转换 markdown 格式
-	result = reBold.ReplaceAllString(result, "<b>$1</b>")
+	// 4. 转义剩余内容
+	md = html.EscapeString(md)
 
-	// 5. 还原行内代码
-	for i, ic := range inlines {
-		escaped := html.EscapeString(ic.code)
-		result = strings.Replace(result, html.EscapeString("\x00IC"+string(rune(i))+"\x00"), "<code>"+escaped+"</code>", 1)
+	// 5. 还原 bold 标记（转义后 \x01 变成 html 实体？不会，\x01 不是 HTML 特殊字符）
+	md = strings.ReplaceAll(md, "\x01B", "<b>")
+	md = strings.ReplaceAll(md, "\x01b", "</b>")
+
+	// 6. 还原占位符（占位符中的 \x00 也不会被 html.EscapeString 改变）
+	for _, h := range holders {
+		escaped := html.EscapeString(h.key)
+		md = strings.Replace(md, escaped, h.replace, 1)
 	}
 
-	// 6. 还原代码块
-	for i, cb := range blocks {
-		escaped := html.EscapeString(cb.code)
-		// 去掉末尾多余换行
-		escaped = strings.TrimRight(escaped, "\n")
-		var replacement string
-		if cb.lang != "" {
-			replacement = "<pre><code class=\"language-" + html.EscapeString(cb.lang) + "\">" + escaped + "</code></pre>"
-		} else {
-			replacement = "<pre><code>" + escaped + "</code></pre>"
-		}
-		result = strings.Replace(result, html.EscapeString("\x00CB"+string(rune(i))+"\x00"), replacement, 1)
-	}
-
-	return result
+	return md
 }

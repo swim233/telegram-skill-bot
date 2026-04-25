@@ -428,12 +428,12 @@ func handleApprove(update tgbotapi.Update) string {
 	args := strings.Fields(update.Message.CommandArguments())
 
 	if len(args) == 0 {
-		return "用法: /approve <command> [user_id]\n可用命令: " + strings.Join(config.ValidCommands, ", ")
+		return "用法: /approve <command|all> [user_id]\n可用命令: all, " + strings.Join(config.ValidCommands, ", ")
 	}
 
 	command := strings.ToLower(args[0])
-	if !config.IsValidCommand(command) {
-		return "未知命令: " + command + "\n可用命令: " + strings.Join(config.ValidCommands, ", ")
+	if command != "all" && !config.IsValidCommand(command) {
+		return "未知命令: " + command + "\n可用命令: all, " + strings.Join(config.ValidCommands, ", ")
 	}
 
 	var userID int64
@@ -447,6 +447,15 @@ func handleApprove(update tgbotapi.Update) string {
 		userID = update.Message.ReplyToMessage.From.ID
 	} else {
 		return "请指定用户 ID 或回复一条消息"
+	}
+
+	if command == "all" {
+		for _, cmd := range config.ValidCommands {
+			if err := config.GrantPermission(chatID, userID, cmd); err != nil {
+				return "授权失败: " + err.Error()
+			}
+		}
+		return fmt.Sprintf("已授权用户 %d 在群组 %d 使用所有命令", userID, chatID)
 	}
 
 	if err := config.GrantPermission(chatID, userID, command); err != nil {
