@@ -247,6 +247,15 @@ func main() {
 			_, err := bot.Bot.Send(msg)
 			return err
 		}
+		// 先发占位消息
+		pending := tgbotapi.NewMessage(chatID, "⏳ 等待响应中...")
+		pending.ReplyToMessageID = update.Message.MessageID
+		sent, sendErr := bot.Bot.Send(pending)
+		if sendErr != nil {
+			return sendErr
+		}
+		pendingMsgID := sent.MessageID
+
 		ctx, cancel := context.WithCancel(context.Background())
 		defer cancel()
 		summaryKey := task.MessageKey{ChatID: chatID, MessageID: update.Message.MessageID}
@@ -255,18 +264,17 @@ func main() {
 		rsp, err := api.SendRequestByScene(ctx, prompt, "summary")
 		if err != nil {
 			if ctx.Err() != nil {
-				msg := tgbotapi.NewMessage(chatID, "summary 请求已取消")
-				msg.ReplyToMessageID = update.Message.MessageID
-				bot.Bot.Send(msg)
+				editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, "summary 请求已取消")
+				bot.Bot.Send(editMsg)
 				return nil
 			}
-			msg := tgbotapi.NewMessage(chatID, utils.FoldText2Html("AI 总结失败", err.Error()))
-			msg.ParseMode = tgbotapi.ModeHTML
-			msg.ReplyToMessageID = update.Message.MessageID
-			_, _ = bot.Bot.Send(msg)
+			errText := utils.FoldText2Html("AI 总结失败", err.Error())
+			editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, errText)
+			editMsg.ParseMode = tgbotapi.ModeHTML
+			bot.Bot.Send(editMsg)
 			return err
 		}
-		return sendLongMarkdownAsFoldedHTMLMessage(update.Message.Chat.ID, update.Message.MessageID, "群聊日报总结", rsp)
+		return editOrSendMarkdownAsFoldedHTML(chatID, pendingMsgID, update.Message.MessageID, "群聊日报总结", rsp)
 	}))
 	b.NewCommandProcessor("approve", asyncHandler(func(update tgbotapi.Update) error {
 		if !allowUpdate(update) {
@@ -377,6 +385,16 @@ func handleSkill(update tgbotapi.Update) error {
 		bot.Bot.Send(msg)
 		return nil
 	}
+
+	// 先发占位消息
+	pending := tgbotapi.NewMessage(chatID, "⏳ 等待响应中...")
+	pending.ReplyToMessageID = update.Message.MessageID
+	sent, err := bot.Bot.Send(pending)
+	if err != nil {
+		return err
+	}
+	pendingMsgID := sent.MessageID
+
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	key := task.MessageKey{ChatID: chatID, MessageID: update.Message.MessageID}
@@ -386,20 +404,20 @@ func handleSkill(update tgbotapi.Update) error {
 	rsp, err := api.SendSkillRequest(ctx, update)
 	if err != nil {
 		if ctx.Err() != nil {
-			msg := tgbotapi.NewMessage(chatID, "skill 请求已取消")
-			msg.ReplyToMessageID = update.Message.MessageID
-			bot.Bot.Send(msg)
+			editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, "skill 请求已取消")
+			bot.Bot.Send(editMsg)
 			return nil
 		}
-		errMsg := tgbotapi.NewMessage(chatID, utils.FoldText2Html("请求api时发生错误 当前模型: "+viper.GetString("API.skill_module"), err.Error()))
-		errMsg.ParseMode = tgbotapi.ModeHTML
-		bot.Bot.Send(errMsg)
+		errText := utils.FoldText2Html("请求api时发生错误 当前模型: "+viper.GetString("API.skill_module"), err.Error())
+		editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, errText)
+		editMsg.ParseMode = tgbotapi.ModeHTML
+		bot.Bot.Send(editMsg)
 		return err
 	}
 	rsp = stripThinkingBlock(rsp)
-	if err := sendLongMarkdownAsFoldedHTMLMessage(update.Message.Chat.ID, update.Message.MessageID, "AI回复", rsp); err != nil {
+	if err := editOrSendMarkdownAsFoldedHTML(chatID, pendingMsgID, update.Message.MessageID, "AI回复", rsp); err != nil {
 		logger.Error("send skill response failed: %s", err.Error())
-		return sendLongPlainTextMessage(update.Message.Chat.ID, update.Message.MessageID, rsp)
+		return sendLongPlainTextMessage(chatID, update.Message.MessageID, rsp)
 	}
 	return nil
 }
@@ -571,25 +589,57 @@ func sendLongPlainTextMessage(chatID int64, replyTo int, content string) error {
 	return nil
 }
 
+// editOrSendMarkdownAsFoldedHTML 尝试编辑占位消息为结果；超长时删除占位并分片发送新消息
+func editOrSendMarkdownAsFoldedHTML(chatID int64, pendingMsgID int, replyTo int, title, mdContent string) error {
+	fullHTML := utils.MarkdownToFoldedHTML(title, mdContent)
+	if len([]rune(fullHTML)) <= 4000 {
+		editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, fullHTML)
+		editMsg.ParseMode = tgbotapi.ModeHTML
+		_, err := bot.Bot.Send(editMsg)
+		if err != nil {
+			// 编辑失败时 fallback：删除占位，发新消息
+			bot.Bot.Send(tgbotapi.NewDeleteMessage(chatID, pendingMsgID))
+			return sendLongMarkdownAsFoldedHTMLMessage(chatID, replyTo, title, mdContent)
+		}
+		return nil
+	}
+	// 超长：删除占位消息，分片发送
+	bot.Bot.Send(tgbotapi.NewDeleteMessage(chatID, pendingMsgID))
+	return sendLongMarkdownAsFoldedHTMLMessage(chatID, replyTo, title, mdContent)
+}
+
 func sendLongMarkdownAsFoldedHTMLMessage(chatID int64, replyTo int, title, mdContent string) error {
-	escaped := utils.EscapeHTML(mdContent)
-	const maxLen = 3200
-	runes := []rune(escaped)
+	fullHTML := utils.MarkdownToFoldedHTML(title, mdContent)
+	// Telegram 单条消息上限约 4096 字符
+	if len([]rune(fullHTML)) <= 4000 {
+		msg := tgbotapi.NewMessage(chatID, fullHTML)
+		msg.ParseMode = tgbotapi.ModeHTML
+		msg.ReplyToMessageID = replyTo
+		_, err := bot.Bot.Send(msg)
+		return err
+	}
+	// 超长内容：按原文分片，每片单独转换
+	const maxLen = 3000
+	runes := []rune(mdContent)
 	for start := 0; start < len(runes); start += maxLen {
 		end := start + maxLen
 		if end > len(runes) {
 			end = len(runes)
 		}
 		chunk := string(runes[start:end])
-		text := utils.FoldText2Html(title, "")
-		// 替换空 blockquote 内容为实际 chunk（保持标签完整）
-		text = "<b>" + utils.EscapeHTML(title) + "</b>\n<blockquote expandable>" + chunk + "</blockquote>"
+		text := utils.MarkdownToFoldedHTML(title, chunk)
 		msg := tgbotapi.NewMessage(chatID, text)
 		msg.ParseMode = tgbotapi.ModeHTML
 		msg.ReplyToMessageID = replyTo
 		_, err := bot.Bot.Send(msg)
 		if err != nil {
-			return err
+			// HTML 解析失败时 fallback 纯文本
+			msg = tgbotapi.NewMessage(chatID, title+"\n\n"+chunk)
+			msg.ReplyToMessageID = replyTo
+			_, err = bot.Bot.Send(msg)
+			if err != nil {
+				return err
+			}
 		}
 	}
 	return nil
