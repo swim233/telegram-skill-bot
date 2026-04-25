@@ -1,0 +1,37 @@
+BOT:
+  bot_token: "<BOT_TOKEN>"
+  owner_id: <OWNER_ID>
+  allow_list:
+    - <OWNER_ID>
+API:
+  skill_module: "claude-opus-4-6-fast[1m]"
+  summary_module: "claude-opus-4-6-fast[1m]"
+  summary_api: "<API_NAME_3>"
+  summary_token: 1
+  skill_api: "<API_NAME_3>"
+  skill_token: 1
+  apis:
+    - name: <API_NAME_1>
+      endpoint: <API_ENDPOINT_1>
+      request_type: responses
+      tokens:
+        - tag: <TAG_1_1>
+          token: <TOKEN_1_1>
+        - tag: <TAG_1_2>
+          token: <TOKEN_1_2>
+    - name: <API_NAME_2>
+      endpoint: <API_ENDPOINT_2>
+      request_type: completions
+      tokens:
+        - tag: <TAG_2_1>
+          token: <TOKEN_2_1>
+    - name: <API_NAME_3>
+      endpoint: <API_ENDPOINT_3>
+      request_type: responses
+      tokens:
+        - tag: <TAG_3_1>
+          token: <TOKEN_3_1>
+        - tag: <TAG_3_2>
+          token: <TOKEN_3_2>
+DATA:
+  sqlite_path: "./data/chat_messages.db"
