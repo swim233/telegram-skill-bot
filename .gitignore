@@ -1,5 +1,4 @@
 bin/
-data/
 log/
 config.yaml
 chat_messages.db
