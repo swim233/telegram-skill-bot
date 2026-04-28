@@ -1,6 +1,28 @@
 # Tasker - Telegram 群聊 AI 助手
 
-一个基于 Go 的 Telegram Bot，提供群聊消息记录、AI 总结、智能问答等功能。
+又一个好玩的 telegram bot ！
+
+拥有 总结群聊 问答 和聚焦搜索的功能 
+快速销毁 token 额度（bushi）
+
+一些示例命令:
+
+```
+/skill 帮我用 go 写一个hello world
+```
+<img width="1912" height="441" alt="image" src="https://github.com/user-attachments/assets/0386f5bb-1f7b-42e9-923c-a6dadfac6bf5" />
+```
+
+```
+/summary 1h # 总结一个小时的聊天记录
+```
+<img width="1913" height="831" alt="image" src="https://github.com/user-attachments/assets/cd74e0f1-b8f0-4f2a-85e1-71dfa6d4c647" />
+
+```
+/focus 1000 查找旅行有关的内容
+```
+<img width="1831" height="383" alt="image" src="https://github.com/user-attachments/assets/f5d1b179-53f8-4c17-a0b6-f1cb220db545" />
+
 
 ## 功能
 
@@ -32,9 +54,22 @@ cp config/config.yaml.example config/config.yaml
 ```yaml
 BOT:
   bot_token: "<BOT_TOKEN>"
-  owner_id: <OWNER_ID>
+  owner_id: <OWNER_ID> # bot 所有者 telegram id
   allow_list:
     - <OWNER_ID>
+    - <GROUP_ID> # 此处需填写启用 bot 的群 id 否则无法使用命令
+
+  # 注释掉的内容为默认不允许使用的指令 需要 /approve 授权
+  allow_commands:
+    - help
+    - del
+    - reply
+    - cancel
+    # - skill
+    # - summary
+    # - focus
+    # - switch
+    # - list_api
 API:
   skill_module: "claude-opus-4-6"
   summary_module: "deepseek-chat"
