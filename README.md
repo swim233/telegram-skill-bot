@@ -11,7 +11,7 @@
 /skill 帮我用 go 写一个hello world
 ```
 <img width="1912" height="441" alt="image" src="https://github.com/user-attachments/assets/0386f5bb-1f7b-42e9-923c-a6dadfac6bf5" />
-```
+
 
 ```
 /summary 1h # 总结一个小时的聊天记录
