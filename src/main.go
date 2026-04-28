@@ -443,6 +443,29 @@ func handleSkill(update tgbotapi.Update) error {
 	return nil
 }
 
+func escapeXML(s string) string {
+	s = strings.ReplaceAll(s, "&", "&amp;")
+	s = strings.ReplaceAll(s, "<", "&lt;")
+	s = strings.ReplaceAll(s, ">", "&gt;")
+	s = strings.ReplaceAll(s, "%", "%%")
+	return s
+}
+
+var (
+	reTelegramLink = regexp.MustCompile(`\[([^\]]*)\]\(https://t\.me/c/(\d+)/(\d+)\)`)
+	reDateArg      = regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+)
+
+func validateTelegramLinks(response string, expectedChatID string) string {
+	return reTelegramLink.ReplaceAllStringFunc(response, func(match string) string {
+		parts := reTelegramLink.FindStringSubmatch(match)
+		if parts == nil || parts[2] != expectedChatID {
+			return ""
+		}
+		return match
+	})
+}
+
 // handleFocus 处理 /focus 命令
 func handleFocus(update tgbotapi.Update) error {
 	chatID := update.Message.Chat.ID
@@ -461,9 +484,7 @@ func handleFocus(update tgbotapi.Update) error {
 	var content string
 
 	// 解析参数
-	dateRegex := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
-
-	if dateRegex.MatchString(args[0]) {
+	if reDateArg.MatchString(args[0]) {
 		// /focus <date> <duration> <content>
 		if len(args) < 3 {
 			msg := tgbotapi.NewMessage(chatID, "指定日期时需要同时提供 duration 和 content\n用法: /focus 2026-04-25 12h 内容")
@@ -529,8 +550,20 @@ func handleFocus(update tgbotapi.Update) error {
 	}
 	pendingMsgID := sent.MessageID
 
+	// 计算 ChatID（去负号，去 100 前缀）
+	absChatID := chatID
+	if absChatID < 0 {
+		absChatID = -absChatID
+	}
+	// Telegram supergroup IDs (after negation) are 13 digits starting with "100";
+	// t.me/c/ links need the "100" prefix stripped.
+	chatIDStr := fmt.Sprintf("%d", absChatID)
+	if len(chatIDStr) >= 13 && strings.HasPrefix(chatIDStr, "100") {
+		chatIDStr = chatIDStr[3:]
+	}
+
 	// 构建 prompt
-	prompt := fmt.Sprintf("以下是群聊消息记录（共 %d 条）：\n\n%s\n\n---\n用户要求：%s", count, messages, content)
+	prompt := fmt.Sprintf(data.FocusPrompt, chatIDStr, escapeXML(content), escapeXML(messages))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
@@ -538,7 +571,7 @@ func handleFocus(update tgbotapi.Update) error {
 	task.TaskManagerInstance.RegisterAPIContext(key, cancel)
 	defer task.TaskManagerInstance.UnregisterAPIContext(key, cancel)
 
-	rsp, err := api.SendRequestByScene(ctx, prompt, "summary")
+	rsp, err := api.SendRequestByScene(ctx, prompt, "focus")
 	if err != nil {
 		if ctx.Err() != nil {
 			editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, "focus 请求已取消")
@@ -552,6 +585,7 @@ func handleFocus(update tgbotapi.Update) error {
 		return err
 	}
 	rsp = stripThinkingBlock(rsp)
+	rsp = validateTelegramLinks(rsp, chatIDStr)
 	return editOrSendMarkdownAsFoldedHTML(chatID, pendingMsgID, update.Message.MessageID, "Focus 分析结果", rsp)
 }
 
