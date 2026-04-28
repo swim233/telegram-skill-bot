@@ -12,21 +12,68 @@ import (
 )
 
 func InitViper() {
-	viper.AddConfigPath("../../../config")
-	viper.AddConfigPath("../../config")
-	viper.AddConfigPath("../config")
 	viper.AddConfigPath("./config")
 	viper.SetConfigName("config.yaml")
 	viper.SetConfigType("yaml")
 	err := viper.ReadInConfig()
 	if err != nil {
 		logger.Errorln("Error in reading config: " + err.Error())
+		createDefaultConfig()
 	}
 	logger.Info("Reading config: %s", viper.ConfigFileUsed())
 	viper.WatchConfig()
 	viper.OnConfigChange(func(in fsnotify.Event) {
 		logger.Info("config file changed")
 	})
+}
+
+func createDefaultConfig() {
+	configDir := "./config"
+	configPath := configDir + "/config.yaml"
+	if _, err := os.Stat(configPath); err == nil {
+		return // 已存在
+	}
+	_ = os.MkdirAll(configDir, 0755)
+	template := `BOT:
+  bot_token: "<BOT_TOKEN>"
+  owner_id: 0
+  allow_list:
+    - 0
+  allow_commands:
+    - help
+    - del
+    - reply
+    - cancel
+    # - skill
+    # - summary
+    # - focus
+    # - switch
+    # - list_api
+API:
+  skill_module: "claude-opus-4-6"
+  summary_module: "deepseek-chat"
+  focus_module: "claude-opus-4-6"
+  summary_api: "your_api"
+  summary_token: 0
+  skill_api: "your_api"
+  skill_token: 0
+  focus_api: "your_api"
+  focus_token: 0
+  apis:
+    - name: your_api
+      endpoint: https://api.example.com/v1
+      request_type: responses
+      tokens:
+        - tag: default
+          token: "sk-xxx"
+DATA:
+  sqlite_path: "./data/chat_messages.db"
+`
+	if err := os.WriteFile(configPath, []byte(template), 0644); err != nil {
+		logger.Error("failed to create default config: %s", err.Error())
+		return
+	}
+	logger.Info("created default config at %s, please edit it and restart", configPath)
 }
 
 func ChangeConfig(cfg *lib.Config) error {
