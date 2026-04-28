@@ -9,10 +9,11 @@ LDFLAGS := -s -w -X main.Version=$(VERSION)
 GOOS ?= linux
 GOARCH ?= amd64
 
-OUTPUT := ./bin/$(BINARY_NAME)-$(VERSION)-$(GOOS)-$(GOARCH)
+OUTPUT_DIR := ./bin/$(VERSION)
+OUTPUT := $(OUTPUT_DIR)/$(BINARY_NAME)-$(VERSION)-$(GOOS)-$(GOARCH)
 
 build:
-	mkdir -p ./bin
+	mkdir -p $(OUTPUT_DIR)
 	cd src && CGO_ENABLED=0 GOOS=$(GOOS) GOARCH=$(GOARCH) go build -ldflags "$(LDFLAGS)" -o ../$(OUTPUT) .
 	upx --best --lzma $(OUTPUT) -o $(OUTPUT)-upx || true
 	@echo "Built: $(OUTPUT)"
@@ -30,6 +31,8 @@ run:
 test:
 	cd src && go test ./...
 
+push: build
+	scp $(OUTPUT)-upx swim@oracle:/home/swim/tasker/$(BINARY_NAME)
 
 clean:
 	rm -rf ./bin
