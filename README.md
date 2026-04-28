@@ -12,11 +12,14 @@
 ```
 <img width="1912" height="441" alt="image" src="https://github.com/user-attachments/assets/0386f5bb-1f7b-42e9-923c-a6dadfac6bf5" />
 
+</br>
 
 ```
 /summary 1h # 总结一个小时的聊天记录
 ```
 <img width="1913" height="831" alt="image" src="https://github.com/user-attachments/assets/cd74e0f1-b8f0-4f2a-85e1-71dfa6d4c647" />
+
+</br>
 
 ```
 /focus 1000 查找旅行有关的内容
