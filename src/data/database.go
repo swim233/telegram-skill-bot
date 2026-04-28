@@ -3,6 +3,7 @@ package data
 import (
 	"database/sql"
 	"fmt"
+	"os"
 	"strings"
 	"time"
 
@@ -33,6 +34,9 @@ type MessageRow struct {
 
 func InitDB() error {
 	dbPath := "./data/chat_messages.db"
+	if err := os.MkdirAll("./data", 0755); err != nil {
+		return err
+	}
 	var err error
 	db, err = sql.Open("sqlite", dbPath)
 	if err != nil {
