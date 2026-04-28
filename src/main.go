@@ -705,6 +705,9 @@ func isAllowedChatID(chatID int64) bool {
 		return true
 	}
 	for _, id := range allowList {
+		if id == 0 {
+			return true
+		}
 		if id == chatID {
 			return true
 		}
@@ -717,13 +720,7 @@ func getAllowList() []int64 {
 	if err := viper.UnmarshalKey("BOT.allow_list", &list); err != nil {
 		return nil
 	}
-	allow := make([]int64, 0, len(list))
-	for _, id := range list {
-		if id != 0 {
-			allow = append(allow, id)
-		}
-	}
-	return allow
+	return list
 }
 
 func sendLongHtmlFoldMessage(chatID int64, replyTo int, title, content string) error {

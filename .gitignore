@@ -3,3 +3,4 @@ log/
 config.yaml
 chat_messages.db
 .continue/*
+makefile.local
