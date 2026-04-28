@@ -3,6 +3,17 @@ BOT:
   owner_id: <OWNER_ID>
   allow_list:
     - <OWNER_ID>
+  # 无需额外授权即可使用的命令（未列出的命令需要 /approve 授权）
+  allow_commands:
+    - help
+    - del
+    - reply
+    - cancel
+    # - skill
+    # - summary
+    # - focus
+    # - switch
+    # - list_api
 API:
   skill_module: "claude-opus-4-6-fast[1m]"
   summary_module: "claude-opus-4-6-fast[1m]"

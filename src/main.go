@@ -157,7 +157,7 @@ func main() {
 			bot.Bot.Send(msg)
 			return nil
 		case "api":
-			if !task.CheckBotOwner(update) && !config.HasPermission(update.Message.Chat.ID, update.Message.From.ID, "list_api") {
+			if !config.IsCommandAllowed("list_api") && !task.CheckBotOwner(update) && !config.HasPermission(update.Message.Chat.ID, update.Message.From.ID, "list_api") {
 				msg := tgbotapi.NewMessage(update.Message.Chat.ID, "无权查看 API 列表，请联系 owner 授权")
 				msg.ReplyToMessageID = update.Message.MessageID
 				_, err := bot.Bot.Send(msg)
@@ -215,7 +215,7 @@ func main() {
 		}
 		chatID := update.Message.Chat.ID
 		userID := update.Message.From.ID
-		if !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "summary") {
+		if !config.IsCommandAllowed("summary") && !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "summary") {
 			msg := tgbotapi.NewMessage(chatID, "无权使用 /summary，请联系 owner 授权")
 			msg.ReplyToMessageID = update.Message.MessageID
 			bot.Bot.Send(msg)
@@ -287,7 +287,7 @@ func main() {
 		}
 		chatID := update.Message.Chat.ID
 		userID := update.Message.From.ID
-		if !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "skill") {
+		if !config.IsCommandAllowed("focus") && !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "focus") {
 			msg := tgbotapi.NewMessage(chatID, "无权使用 /focus，请联系 owner 授权")
 			msg.ReplyToMessageID = update.Message.MessageID
 			bot.Bot.Send(msg)
@@ -400,7 +400,7 @@ func allowUpdate(update tgbotapi.Update) bool {
 func handleSkill(update tgbotapi.Update) error {
 	chatID := update.Message.Chat.ID
 	userID := update.Message.From.ID
-	if !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "skill") {
+	if !config.IsCommandAllowed("skill") && !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "skill") {
 		msg := tgbotapi.NewMessage(chatID, "无权使用 /skill，请联系 owner 授权")
 		msg.ReplyToMessageID = update.Message.MessageID
 		bot.Bot.Send(msg)

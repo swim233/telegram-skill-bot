@@ -35,9 +35,10 @@ func (t APIToken) Secret() string {
 }
 
 type BOTConfig struct {
-	BotToken   string  `yaml:"bot_token" mapstructure:"bot_token"`
-	OwnerID    int64   `yaml:"owner_id" mapstructure:"owner_id"`
-	AllowList  []int64 `yaml:"allow_list" mapstructure:"allow_list"`
+	BotToken      string   `yaml:"bot_token" mapstructure:"bot_token"`
+	OwnerID       int64    `yaml:"owner_id" mapstructure:"owner_id"`
+	AllowList     []int64  `yaml:"allow_list" mapstructure:"allow_list"`
+	AllowCommands []string `yaml:"allow_commands" mapstructure:"allow_commands"`
 }
 
 type DataConfig struct {

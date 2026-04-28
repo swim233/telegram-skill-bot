@@ -140,11 +140,25 @@ func ListChatPermissions(chatID int64) map[int64][]string {
 }
 
 // ValidCommands lists all commands that can be granted via /approve
-var ValidCommands = []string{"summary", "skill", "switch", "list_api"}
+var ValidCommands = []string{"summary", "skill", "focus", "switch", "list_api"}
 
 func IsValidCommand(cmd string) bool {
 	for _, c := range ValidCommands {
 		if c == cmd {
+			return true
+		}
+	}
+	return false
+}
+
+// IsCommandAllowed 检查命令是否在 allow_commands 中（无需授权即可使用）
+func IsCommandAllowed(command string) bool {
+	var commands []string
+	if err := viper.UnmarshalKey("BOT.allow_commands", &commands); err != nil {
+		return false
+	}
+	for _, c := range commands {
+		if c == command {
 			return true
 		}
 	}

@@ -15,7 +15,7 @@ import (
 )
 
 func SwitchAction(u tgbotapi.Update) (string, error) {
-	if !task.CheckBotOwner(u) && (u.Message == nil || !config.HasPermission(u.Message.Chat.ID, u.Message.From.ID, "switch")) {
+	if !config.IsCommandAllowed("switch") && !task.CheckBotOwner(u) && (u.Message == nil || !config.HasPermission(u.Message.Chat.ID, u.Message.From.ID, "switch")) {
 		return "", errors.New("无权使用 /switch，请联系 owner 授权")
 	}
 	if u.Message == nil {
