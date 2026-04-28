@@ -1,4 +1,4 @@
-# Tasker - Telegram 群聊 AI 助手
+# 又一个 Telegram 群聊 AI 助手
 
 又一个好玩的 telegram bot ！
 
