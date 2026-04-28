@@ -17,10 +17,13 @@ BOT:
 API:
   skill_module: "claude-opus-4-6-fast[1m]"
   summary_module: "claude-opus-4-6-fast[1m]"
+  focus_module: "claude-opus-4-6-fast[1m]"
   summary_api: "<API_NAME_3>"
   summary_token: 1
   skill_api: "<API_NAME_3>"
   skill_token: 1
+  focus_api: "<API_NAME_3>"
+  focus_token: 1
   apis:
     - name: <API_NAME_1>
       endpoint: <API_ENDPOINT_1>

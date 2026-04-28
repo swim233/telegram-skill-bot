@@ -555,6 +555,10 @@ func resolveRouteByScene(scene string) (RequestRoute, error) {
 		targetAPI = strings.TrimSpace(cfg.API.SkillAPI)
 		targetToken = cfg.API.SkillToken
 		targetModel = strings.TrimSpace(cfg.API.SkillModule)
+	case "focus":
+		targetAPI = strings.TrimSpace(cfg.API.FocusAPI)
+		targetToken = cfg.API.FocusToken
+		targetModel = strings.TrimSpace(cfg.API.FocusModule)
 	default:
 		return RequestRoute{}, fmt.Errorf("unsupported scene: %s", scene)
 	}

@@ -11,10 +11,13 @@ type Config struct {
 type APIConfig struct {
 	SummaryModule string        `yaml:"summary_module" mapstructure:"summary_module"`
 	SkillModule   string        `yaml:"skill_module" mapstructure:"skill_module"`
+	FocusModule   string        `yaml:"focus_module" mapstructure:"focus_module"`
 	SummaryAPI    string        `yaml:"summary_api" mapstructure:"summary_api"`
 	SummaryToken  int           `yaml:"summary_token" mapstructure:"summary_token"`
 	SkillAPI      string        `yaml:"skill_api" mapstructure:"skill_api"`
 	SkillToken    int           `yaml:"skill_token" mapstructure:"skill_token"`
+	FocusAPI      string        `yaml:"focus_api" mapstructure:"focus_api"`
+	FocusToken    int           `yaml:"focus_token" mapstructure:"focus_token"`
 	APIs          []APIProvider `yaml:"apis" mapstructure:"apis"`
 }
 
