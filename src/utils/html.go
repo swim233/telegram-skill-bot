@@ -22,6 +22,9 @@ var (
 	reCodeBlock  = regexp.MustCompile("(?s)```(\\w*)\\n(.*?)```")
 	reInlineCode = regexp.MustCompile("`([^`]+)`")
 	reBold       = regexp.MustCompile(`\*\*(.+?)\*\*`)
+	reHeading    = regexp.MustCompile(`(?m)^#{1,6}\s+(.+)$`)
+	reHR         = regexp.MustCompile(`(?m)^---+$`)
+	reListItem   = regexp.MustCompile(`(?m)^(\s*)[-*]\s+(.+)$`)
 )
 
 // MarkdownToFoldedHTML 将 Markdown 转为 Telegram HTML 并包裹折叠标签
@@ -71,7 +74,16 @@ func markdownToTelegramHTML(md string) string {
 		return key
 	})
 
-	// 3. 转换 bold（在转义前处理，因为 ** 会被转义）
+	// 3. 转换 heading → bold
+	md = reHeading.ReplaceAllString(md, "\x01B$1\x01b")
+
+	// 3.1 转换 --- 水平线
+	md = reHR.ReplaceAllString(md, "————————")
+
+	// 3.2 转换列表项 - xxx → • xxx
+	md = reListItem.ReplaceAllString(md, "$1• $2")
+
+	// 3.3 转换 bold **text**
 	md = reBold.ReplaceAllString(md, "\x01B$1\x01b")
 
 	// 4. 转义剩余内容

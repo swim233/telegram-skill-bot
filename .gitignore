@@ -2,3 +2,4 @@ bin/
 log/
 config.yaml
 chat_messages.db
+.continue/*

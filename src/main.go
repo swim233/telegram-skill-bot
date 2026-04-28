@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"strconv"
 	"strings"
 	"time"
@@ -276,6 +277,25 @@ func main() {
 		}
 		return editOrSendMarkdownAsFoldedHTML(chatID, pendingMsgID, update.Message.MessageID, "群聊日报总结", rsp)
 	}))
+	b.NewCommandProcessor("focus", asyncHandler(func(update tgbotapi.Update) error {
+		if !allowUpdate(update) {
+			return nil
+		}
+		_ = data.SaveGroupMessage(update)
+		if update.Message == nil || update.Message.Chat == nil {
+			return nil
+		}
+		chatID := update.Message.Chat.ID
+		userID := update.Message.From.ID
+		if !task.CheckBotOwner(update) && !config.HasPermission(chatID, userID, "skill") {
+			msg := tgbotapi.NewMessage(chatID, "无权使用 /focus，请联系 owner 授权")
+			msg.ReplyToMessageID = update.Message.MessageID
+			bot.Bot.Send(msg)
+			return nil
+		}
+		result := handleFocus(update)
+		return result
+	}))
 	b.NewCommandProcessor("approve", asyncHandler(func(update tgbotapi.Update) error {
 		if !allowUpdate(update) {
 			return nil
@@ -318,6 +338,7 @@ func main() {
 			"/cancel [ai|task] — 取消任务（回复目标消息）",
 			"/summary [duration] — AI 群聊总结",
 			"/skill <prompt> — AI 问答",
+			"/focus <duration|date|条数> <content> — 聚焦分析聊天记录",
 			"/switch models <skill|summary> <model_id> — 切换模型",
 			"/switch api <skill|summary> <api_name> [token_index] — 切换 API",
 			"/approve <command> [user_id] — 授权用户使用命令",
@@ -420,6 +441,118 @@ func handleSkill(update tgbotapi.Update) error {
 		return sendLongPlainTextMessage(chatID, update.Message.MessageID, rsp)
 	}
 	return nil
+}
+
+// handleFocus 处理 /focus 命令
+func handleFocus(update tgbotapi.Update) error {
+	chatID := update.Message.Chat.ID
+	args := strings.Fields(update.Message.CommandArguments())
+
+	if len(args) < 2 {
+		msg := tgbotapi.NewMessage(chatID, "用法:\n/focus <duration> <content>\n/focus <date> <duration> <content>\n/focus <数字条数> <content>\n\n示例:\n/focus 12h 总结关于技术的讨论\n/focus 2026-04-25 6h 找关于部署的内容\n/focus 500 最近讨论了什么")
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Bot.Send(msg)
+		return nil
+	}
+
+	var messages string
+	var count int
+	var err error
+	var content string
+
+	// 解析参数
+	dateRegex := regexp.MustCompile(`^\d{4}-\d{2}-\d{2}$`)
+
+	if dateRegex.MatchString(args[0]) {
+		// /focus <date> <duration> <content>
+		if len(args) < 3 {
+			msg := tgbotapi.NewMessage(chatID, "指定日期时需要同时提供 duration 和 content\n用法: /focus 2026-04-25 12h 内容")
+			msg.ReplyToMessageID = update.Message.MessageID
+			bot.Bot.Send(msg)
+			return nil
+		}
+		startDate, parseErr := time.Parse("2006-01-02", args[0])
+		if parseErr != nil {
+			msg := tgbotapi.NewMessage(chatID, "日期格式错误，应为 yyyy-mm-dd")
+			msg.ReplyToMessageID = update.Message.MessageID
+			bot.Bot.Send(msg)
+			return nil
+		}
+		duration, parseErr := time.ParseDuration(args[1])
+		if parseErr != nil {
+			msg := tgbotapi.NewMessage(chatID, "时间段格式错误，示例: 12h, 30m, 1d（注意: 天用 24h 表示）")
+			msg.ReplyToMessageID = update.Message.MessageID
+			bot.Bot.Send(msg)
+			return nil
+		}
+		endTime := startDate.Add(duration)
+		content = strings.Join(args[2:], " ")
+		messages, count, err = data.QueryMessagesByTimeRange(chatID, startDate, endTime)
+	} else if num, parseErr := strconv.Atoi(args[0]); parseErr == nil && num > 0 {
+		// /focus <capacity> <content>
+		content = strings.Join(args[1:], " ")
+		messages, count, err = data.QueryMessagesByCapacity(chatID, num)
+	} else if _, parseErr := time.ParseDuration(args[0]); parseErr == nil {
+		// /focus <duration> <content>
+		duration, _ := time.ParseDuration(args[0])
+		endTime := time.Now().UTC()
+		startTime := endTime.Add(-duration)
+		content = strings.Join(args[1:], " ")
+		messages, count, err = data.QueryMessagesByTimeRange(chatID, startTime, endTime)
+	} else {
+		msg := tgbotapi.NewMessage(chatID, "无法识别第一个参数，应为日期(yyyy-mm-dd)、时间段(如12h)或消息条数(如500)")
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Bot.Send(msg)
+		return nil
+	}
+
+	if err != nil {
+		msg := tgbotapi.NewMessage(chatID, utils.FoldText2Html("查询消息失败", err.Error()))
+		msg.ParseMode = tgbotapi.ModeHTML
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Bot.Send(msg)
+		return err
+	}
+	if count == 0 {
+		msg := tgbotapi.NewMessage(chatID, "指定范围内暂无消息记录。")
+		msg.ReplyToMessageID = update.Message.MessageID
+		bot.Bot.Send(msg)
+		return nil
+	}
+
+	// 发送 pending 消息
+	pending := tgbotapi.NewMessage(chatID, fmt.Sprintf("⏳ 正在分析 %d 条消息...", count))
+	pending.ReplyToMessageID = update.Message.MessageID
+	sent, sendErr := bot.Bot.Send(pending)
+	if sendErr != nil {
+		return sendErr
+	}
+	pendingMsgID := sent.MessageID
+
+	// 构建 prompt
+	prompt := fmt.Sprintf("以下是群聊消息记录（共 %d 条）：\n\n%s\n\n---\n用户要求：%s", count, messages, content)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	key := task.MessageKey{ChatID: chatID, MessageID: update.Message.MessageID}
+	task.TaskManagerInstance.RegisterAPIContext(key, cancel)
+	defer task.TaskManagerInstance.UnregisterAPIContext(key, cancel)
+
+	rsp, err := api.SendRequestByScene(ctx, prompt, "summary")
+	if err != nil {
+		if ctx.Err() != nil {
+			editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, "focus 请求已取消")
+			bot.Bot.Send(editMsg)
+			return nil
+		}
+		errText := utils.FoldText2Html("focus 请求失败", err.Error())
+		editMsg := tgbotapi.NewEditMessageText(chatID, pendingMsgID, errText)
+		editMsg.ParseMode = tgbotapi.ModeHTML
+		bot.Bot.Send(editMsg)
+		return err
+	}
+	rsp = stripThinkingBlock(rsp)
+	return editOrSendMarkdownAsFoldedHTML(chatID, pendingMsgID, update.Message.MessageID, "Focus 分析结果", rsp)
 }
 
 // handleApprove 处理 /approve <command> [user_id] 或回复消息
