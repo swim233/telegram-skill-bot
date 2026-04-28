@@ -207,7 +207,7 @@ var SummaryPrompt = `
 // QueryMessagesByTimeRange 查询指定时间范围内的消息，返回格式化文本和条数
 func QueryMessagesByTimeRange(chatID int64, startTime, endTime time.Time) (string, int, error) {
 	rows, err := db.Query(`
-		SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content
+		SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content, message_id
 		FROM group_messages
 		WHERE chat_id = ? AND sender_time_utc >= ? AND sender_time_utc <= ? AND text_content != ''
 		ORDER BY sender_time_utc ASC`,
@@ -222,9 +222,9 @@ func QueryMessagesByTimeRange(chatID int64, startTime, endTime time.Time) (strin
 // QueryMessagesByCapacity 查询最近 N 条消息，返回格式化文本和条数
 func QueryMessagesByCapacity(chatID int64, limit int) (string, int, error) {
 	rows, err := db.Query(`
-		SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content
+		SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content, message_id
 		FROM (
-			SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content
+			SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content, message_id
 			FROM group_messages
 			WHERE chat_id = ? AND text_content != ''
 			ORDER BY sender_time_utc DESC
@@ -244,14 +244,16 @@ func formatMessageRows(rows *sql.Rows) (string, int, error) {
 	for rows.Next() {
 		var fullName, text, replyFullName, replyText string
 		var ts int64
-		if err := rows.Scan(&fullName, &text, &ts, &replyFullName, &replyText); err != nil {
+		var messageID int
+		if err := rows.Scan(&fullName, &text, &ts, &replyFullName, &replyText, &messageID); err != nil {
 			logger.Error("Error scanning row: %s", err.Error())
 			continue
 		}
 		timeStr := time.Unix(ts, 0).UTC().Format("2006-01-02 15:04")
-		sb.WriteString(fmt.Sprintf("[%s] %s: %s\n", timeStr, fullName, text))
-		if replyFullName != "" && replyText != "" {
-			sb.WriteString(fmt.Sprintf("  ↳ 回复 %s: %s\n", replyFullName, replyText))
+		if replyFullName != "" {
+			sb.WriteString(fmt.Sprintf("[%s] %s {回复 %s}： %s #%d\n", timeStr, fullName, replyFullName, text, messageID))
+		} else {
+			sb.WriteString(fmt.Sprintf("[%s] %s： %s #%d\n", timeStr, fullName, text, messageID))
 		}
 		count++
 	}
