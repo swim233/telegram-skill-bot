@@ -1,0 +1,5 @@
+push: build
+	scp $(OUTPUT)-upx swim@oracle:/home/swim/tasker/$(BINARY_NAME)
+
+upload:
+	scp ./bin/Tasker-upx swim@oracle:/home/swim/tasker/

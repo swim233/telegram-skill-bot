@@ -7,7 +7,7 @@ import (
 	"time"
 
 	tgbotapi "github.com/ijnkawakaze/telegram-bot-api"
-	_ "github.com/mattn/go-sqlite3"
+	_ "modernc.org/sqlite"
 	"github.com/swim233/logger"
 )
 
@@ -34,7 +34,7 @@ type MessageRow struct {
 func InitDB() error {
 	dbPath := "./data/chat_messages.db"
 	var err error
-	db, err = sql.Open("sqlite3", dbPath)
+	db, err = sql.Open("sqlite", dbPath)
 	if err != nil {
 		return err
 	}
