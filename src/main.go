@@ -37,7 +37,7 @@ func main() {
 	bot.InitBot()
 	b := bot.Bot.AddHandle()
 	b.NewProcessor(func(update tgbotapi.Update) bool {
-		return allowUpdate(update) && update.Message != nil && update.Message.Chat != nil && !update.Message.Chat.IsPrivate() && !update.Message.IsCommand()
+		return allowUpdate(update) && update.Message != nil && update.Message.Chat != nil && !update.Message.Chat.IsPrivate() && !update.Message.IsCommand() && (update.Message.From == nil || !update.Message.From.IsBot)
 	}, func(update tgbotapi.Update) error {
 		return data.SaveGroupMessage(update)
 	})
