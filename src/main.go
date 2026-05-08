@@ -562,8 +562,10 @@ func handleFocus(update tgbotapi.Update) error {
 		chatIDStr = chatIDStr[3:]
 	}
 
+	userFullName := update.Message.From.FullName()
+
 	// 构建 prompt
-	prompt := fmt.Sprintf(data.FocusPrompt, chatIDStr, escapeXML(content), escapeXML(messages))
+	prompt := fmt.Sprintf(data.FocusPrompt, chatIDStr, userFullName, escapeXML(content), escapeXML(messages))
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
