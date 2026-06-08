@@ -15,7 +15,9 @@
 </br>
 
 ```
-/summary 1h # 总结一个小时的聊天记录
+/summary 1h               # 相对时长：总结过去 1 小时
+/summary 1d12h            # m/h/d 任意组合
+/summary 26.6.7 8h0m-20h0m  # 指定日期 + 当天时段（UTC+8）
 ```
 <img width="1913" height="831" alt="image" src="https://github.com/user-attachments/assets/cd74e0f1-b8f0-4f2a-85e1-71dfa6d4c647" />
 
@@ -32,7 +34,7 @@
 | 命令 | 说明 |
 |------|------|
 | `/skill <prompt>` | AI 问答（支持图片、文件附件） |
-| `/summary [duration]` | AI 群聊总结（默认 24h） |
+| `/summary [duration \| date timeRange]` | AI 群聊总结（默认 1d，时段按 UTC+8） |
 | `/focus <duration\|date\|条数> <content>` | 聚焦分析指定范围的聊天记录 |
 | `/del <duration>` | 定时删除消息 |
 | `/reply <duration> <content>` | 定时回复消息 |

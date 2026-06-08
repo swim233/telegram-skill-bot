@@ -131,14 +131,20 @@ func SaveGroupMessage(update tgbotapi.Update) error {
 	return err
 }
 
+// BuildSummaryPrompt 按相对时长构建总结 prompt（向后兼容入口）。
 func BuildSummaryPrompt(chatID int64, duration time.Duration) (string, error) {
-	since := time.Now().UTC().Add(-duration).Unix()
+	end := time.Now().UTC()
+	start := end.Add(-duration)
+	return BuildSummaryPromptByRange(chatID, start, end)
+}
+
+func BuildSummaryPromptByRange(chatID int64, start, end time.Time) (string, error) {
 	rows, err := db.Query(`
 		SELECT user_full_name, text_content, sender_time_utc, reply_to_user_full_name, reply_to_text_content
 		FROM group_messages
-		WHERE chat_id = ? AND sender_time_utc >= ? AND text_content != ''
+		WHERE chat_id = ? AND sender_time_utc >= ? AND sender_time_utc <= ? AND text_content != ''
 		ORDER BY sender_time_utc ASC`,
-		chatID, since)
+		chatID, start.Unix(), end.Unix())
 	if err != nil {
 		return "", err
 	}
