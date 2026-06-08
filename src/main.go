@@ -221,9 +221,9 @@ func main() {
 			bot.Bot.Send(msg)
 			return nil
 		}
-		duration, parseErr := parseSummaryDuration(update.Message.CommandArguments())
+		start, end, parseErr := parseSummaryRange(update.Message.CommandArguments())
 		if parseErr != nil {
-			msg := tgbotapi.NewMessage(chatID, "时间参数格式错误，示例: /summary 24h")
+			msg := tgbotapi.NewMessage(chatID, "时间参数格式错误，示例: /summary 24h、/summary 30m、/summary 1d 或 /summary 26.6.7 8h0m-20h0m")
 			msg.ReplyToMessageID = update.Message.MessageID
 			_, sendErr := bot.Bot.Send(msg)
 			if sendErr != nil {
@@ -231,7 +231,7 @@ func main() {
 			}
 			return parseErr
 		}
-		prompt, err := data.BuildSummaryPrompt(chatID, duration)
+		prompt, err := data.BuildSummaryPromptByRange(chatID, start, end)
 		if err != nil {
 			msg := tgbotapi.NewMessage(chatID, utils.FoldText2Html("构建总结数据失败", err.Error()))
 			msg.ParseMode = tgbotapi.ModeHTML
@@ -336,7 +336,7 @@ func main() {
 			"/del <duration> — 定时删除消息",
 			"/reply <duration> <content> — 定时回复消息",
 			"/cancel [ai|task] — 取消任务（回复目标消息）",
-			"/summary [duration] — AI 群聊总结",
+			"/summary [duration | date timeRange] — AI 群聊总结，例: /summary 24h、/summary 1d、/summary 26.6.7 8h0m-20h0m",
 			"/skill <prompt> — AI 问答",
 			"/focus <duration|date|条数> <content> — 聚焦分析聊天记录",
 			"/switch models <skill|summary> <model_id> — 切换模型",
@@ -838,12 +838,143 @@ func stripThinkingBlock(s string) string {
 	return strings.TrimSpace(s)
 }
 
-func parseSummaryDuration(arg string) (time.Duration, error) {
+// summaryTZ 是 /summary 时间参数采用的固定时区（UTC+8）。
+var summaryTZ = time.FixedZone("UTC+8", 8*3600)
+
+var (
+	summaryDurationRe = regexp.MustCompile(`^(?:\d+d)?(?:\d+h)?(?:\d+m)?$`)
+	summaryDateRe     = regexp.MustCompile(`^(\d{2}|\d{4})\.(\d{1,2})\.(\d{1,2})$`)
+	summaryClockRe    = regexp.MustCompile(`^(\d{1,2})h(?:(\d{1,2})m)?$`)
+)
+
+// parseSummaryRange 解析 /summary 的时间参数，返回 UTC 起止时间。
+// 支持两种形式：
+//  1. 相对时长（m/h/d 任意组合）："30m"、"24h"、"1d12h30m"；空串默认 1d。
+//  2. 指定日期 + 当天时段（按 UTC+8 解释）："26.6.7 8h0m-20h0m"。
+func parseSummaryRange(arg string) (time.Time, time.Time, error) {
 	arg = strings.TrimSpace(arg)
 	if arg == "" {
-		return 24 * time.Hour, nil
+		end := time.Now().UTC()
+		return end.Add(-24 * time.Hour), end, nil
 	}
-	return time.ParseDuration(arg)
+
+	fields := strings.Fields(arg)
+	switch len(fields) {
+	case 1:
+		d, err := parseMHDDuration(fields[0])
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		end := time.Now().UTC()
+		return end.Add(-d), end, nil
+	case 2:
+		date, err := parseSummaryDate(fields[0])
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		startClock, endClock, err := parseSummaryClockRange(fields[1])
+		if err != nil {
+			return time.Time{}, time.Time{}, err
+		}
+		start := time.Date(date.Year(), date.Month(), date.Day(),
+			startClock[0], startClock[1], 0, 0, summaryTZ)
+		end := time.Date(date.Year(), date.Month(), date.Day(),
+			endClock[0], endClock[1], 0, 0, summaryTZ)
+		if !end.After(start) {
+			return time.Time{}, time.Time{}, fmt.Errorf("结束时间必须晚于起始时间")
+		}
+		return start.UTC(), end.UTC(), nil
+	default:
+		return time.Time{}, time.Time{}, fmt.Errorf("参数数量不正确，应为 1 或 2 个")
+	}
+}
+
+func parseMHDDuration(s string) (time.Duration, error) {
+	s = strings.TrimSpace(s)
+	if s == "" || !summaryDurationRe.MatchString(s) {
+		return 0, fmt.Errorf("时长格式错误: %q，仅支持 m/h/d，例如 30m、24h、1d、1d12h", s)
+	}
+	var total time.Duration
+	var hasUnit bool
+	rest := s
+	for _, unit := range []struct {
+		suffix string
+		mul    time.Duration
+	}{
+		{"d", 24 * time.Hour},
+		{"h", time.Hour},
+		{"m", time.Minute},
+	} {
+		idx := strings.Index(rest, unit.suffix)
+		if idx < 0 {
+			continue
+		}
+		n, err := strconv.Atoi(rest[:idx])
+		if err != nil {
+			return 0, fmt.Errorf("时长格式错误: %q", s)
+		}
+		total += time.Duration(n) * unit.mul
+		rest = rest[idx+len(unit.suffix):]
+		hasUnit = true
+	}
+	if !hasUnit || rest != "" || total <= 0 {
+		return 0, fmt.Errorf("时长格式错误: %q", s)
+	}
+	return total, nil
+}
+
+func parseSummaryDate(s string) (time.Time, error) {
+	m := summaryDateRe.FindStringSubmatch(s)
+	if m == nil {
+		return time.Time{}, fmt.Errorf("日期格式错误: %q，应为 YY.M.D 或 YYYY.M.D", s)
+	}
+	year, _ := strconv.Atoi(m[1])
+	if len(m[1]) == 2 {
+		year += 2000
+	}
+	month, _ := strconv.Atoi(m[2])
+	day, _ := strconv.Atoi(m[3])
+	if month < 1 || month > 12 || day < 1 || day > 31 {
+		return time.Time{}, fmt.Errorf("日期数值非法: %q", s)
+	}
+	t := time.Date(year, time.Month(month), day, 0, 0, 0, 0, summaryTZ)
+	// time.Date 会静默规范化非法日期（如 2.30 -> 3.2），需回查原值
+	if t.Year() != year || t.Month() != time.Month(month) || t.Day() != day {
+		return time.Time{}, fmt.Errorf("日期数值非法: %q", s)
+	}
+	return t, nil
+}
+
+func parseSummaryClockRange(s string) ([2]int, [2]int, error) {
+	parts := strings.Split(s, "-")
+	if len(parts) != 2 {
+		return [2]int{}, [2]int{}, fmt.Errorf("时段格式错误: %q，应为 Xh[Ym]-Xh[Ym]", s)
+	}
+	start, err := parseSummaryClock(parts[0])
+	if err != nil {
+		return [2]int{}, [2]int{}, err
+	}
+	end, err := parseSummaryClock(parts[1])
+	if err != nil {
+		return [2]int{}, [2]int{}, err
+	}
+	return start, end, nil
+}
+
+func parseSummaryClock(s string) ([2]int, error) {
+	m := summaryClockRe.FindStringSubmatch(s)
+	if m == nil {
+		return [2]int{}, fmt.Errorf("时刻格式错误: %q，应为 Xh 或 XhYm", s)
+	}
+	hour, _ := strconv.Atoi(m[1])
+	minute := 0
+	if m[2] != "" {
+		minute, _ = strconv.Atoi(m[2])
+	}
+	if hour < 0 || hour > 23 || minute < 0 || minute > 59 {
+		return [2]int{}, fmt.Errorf("时刻数值非法: %q", s)
+	}
+	return [2]int{hour, minute}, nil
 }
 
 func logSummaryPromptPreview(prompt string, lines int) {
